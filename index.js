@@ -7,9 +7,9 @@ exports = module.exports = Pickup
 const StringDecoder = require('string_decoder').StringDecoder
 const attribute = require('./lib/attribute')
 const debug = require('util').debuglog('pickup')
+const htmlparser = require('htmlparser2')
 const mappings = require('./lib/mappings')
 const os = require('os')
-const sax = require('sax')
 const stream = require('readable-stream')
 const util = require('util')
 
@@ -34,8 +34,6 @@ function Opts (trim, normalize, position) {
   this.normalize = normalize
   this.position = position
 }
-
-const saxOpts = new Opts(true, true, false)
 
 function encodingFromString (str) {
   if (str.match(/utf-8/i)) {
@@ -67,65 +65,64 @@ function Pickup (opts) {
 
   this.eventMode = opts && opts.eventMode
   this.map = null
-  this.parser = sax.parser(true, saxOpts)
-  this.state = new State()
-
-  const parser = this.parser
-
-  parser.ontext = (t) => {
-    const current = this.current()
-    const map = this.map
-    const state = this.state
-    const name = this.state.name
-
-    if (!current || !map) return
-
-    let key = map.get(name)
-    if (state.image && name === 'url') key = 'image'
-
-    const isSet = current[key] !== undefined
-    const isSummary = key === 'summary' && (
-      name === 'summary' || name === 'itunes:summary'
-    )
-    if (key === undefined || (isSet && !isSummary)) return
-
-    current[key] = t
-  }
-
-  parser.oncdata = (d) => {
-    parser.ontext(d)
-  }
 
   const handle = (name, handlers) => {
     if (handlers.hasOwnProperty(name)) {
       handlers[name].apply(this)
     }
   }
-  parser.onopentag = (node) => {
-    const name = node.name
-    this.state.name = name
-    this.map = mappings[name] || this.map
-    handle(name, Pickup.openHandlers)
-    const current = this.current()
-    if (current) {
-      const key = this.map.get(name)
-      if (key) {
-        const attributes = node.attributes
-        const keys = Object.keys(attributes)
-        if (keys.length) {
-          const kv = attribute(key, attributes, current)
-          if (kv) {
-            current[kv[0]] = kv[1]
+
+  this.parser = new htmlparser.Parser({
+    ontext: (t) => {
+      const current = this.current()
+      const map = this.map
+      const state = this.state
+      const name = this.state.name
+
+      if (!current || !map) return
+
+      let key = map.get(name)
+      if (state.image && name === 'url') key = 'image'
+
+      const isSet = current[key] !== undefined
+      const isSummary = key === 'summary' && (
+        name === 'summary' || name === 'itunes:summary'
+      )
+      if (key === undefined || (isSet && !isSummary)) return
+
+      current[key] = t
+    },
+    oncdata: (d) => {
+      parser.ontext(d)
+    },
+    onopentag: (node) => {
+      const name = node.name
+      this.state.name = name
+      this.map = mappings[name] || this.map
+      handle(name, Pickup.openHandlers)
+      const current = this.current()
+      if (current) {
+        const key = this.map.get(name)
+        if (key) {
+          const attributes = node.attributes
+          const keys = Object.keys(attributes)
+          if (keys.length) {
+            const kv = attribute(key, attributes, current)
+            if (kv) {
+              current[kv[0]] = kv[1]
+            }
           }
         }
       }
+    },
+    onclosetag: (name) => {
+      handle(name, Pickup.closeHandlers)
+      this.state.name = null
     }
-  }
+  })
 
-  parser.onclosetag = (name) => {
-    handle(name, Pickup.closeHandlers)
-    this.state.name = null
-  }
+  this.state = new State()
+
 }
 
 Pickup.prototype.current = function () {
@@ -197,7 +194,6 @@ function free (parser) {
 
 Pickup.prototype._flush = function (cb) {
   free(this.parser)
-  this.parser.close()
 
   this._decoder = null
 
@@ -232,9 +228,7 @@ Pickup.prototype._transform = function (chunk, enc, cb) {
     this.emit('encoding', this.encoding)
   }
   const str = this.decoder.write(chunk)
-  const er = this.parser.write(str).error
-  this.parser.error = null
-  cb(er)
+  cb()
 }
 
 function Entry (

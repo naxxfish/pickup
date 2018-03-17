@@ -35,8 +35,8 @@
   },
   "homepage": "https://github.com/michaelnisi/pickup",
   "dependencies": {
-    "readable-stream": "^2.3.3",
-    "sax": "^1.2.4"
+    "htmlparser2": "^3.9.2",
+    "readable-stream": "^2.3.3"
   },
   "devDependencies": {
     "standard": "^10.0.2",
