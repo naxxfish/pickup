@@ -35,8 +35,6 @@ function Opts (trim, normalize, position) {
   this.position = position
 }
 
-const saxOpts = new Opts(true, true, false)
-
 function encodingFromString (str) {
   if (str.match(/utf-8/i)) {
     return 'utf8'
@@ -51,6 +49,8 @@ function encodingFromOpts (opts) {
   if (typeof str !== 'string') return null
   return encodingFromString(str)
 }
+
+const saxOpts = new Opts(true, true, false)
 
 util.inherits(Pickup, stream.Transform)
 function Pickup (opts) {
@@ -89,7 +89,7 @@ function Pickup (opts) {
 
     if (isSet) {
       if (key === 'summary') {
-        if (name !== 'content:encoded') {
+        if (name !== 'content:encoded' || t.length > 4096) {
           return
         }
       }
